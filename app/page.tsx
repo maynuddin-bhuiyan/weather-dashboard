@@ -1,9 +1,7 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
-import { Search, Trash2, Sun, Cloud, CloudSun, CloudRain, CloudLightning, CloudSnow, RefreshCw } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Search, Trash2, Sun, Cloud, CloudSun, CloudRain, CloudLightning, CloudSnow, RefreshCw, Moon, CloudMoon, CloudFog } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,84 +9,130 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 
-// data Types
 interface WeatherData {
   city: string
+  country: string
   temperature: number
   condition: string
   humidity: number
   windSpeed: number
   icon: string
+  description: string
 }
 
-// Cities for search
-const CITIES = [
-  "New York",
-  "London",
-  "Tokyo",
-  "Paris",
-  "Sydney",
-  "Berlin",
-  "Toronto",
-  "Singapore",
-  "Dubai",
-  "San Francisco",
-  "Barcelona",
-  "Rome",
-  "Amsterdam",
-]
+interface City {
+  name: string
+  country: string
+  lat: number
+  lon: number
+}
 
-// Generate mock weather data
-function generateWeatherData(city: string): WeatherData {
-  const CONDITIONS = [
-    { condition: "Sunny", icon: "sun" },
-    { condition: "Partly Cloudy", icon: "cloud-sun" },
-    { condition: "Cloudy", icon: "cloud" },
-    { condition: "Rainy", icon: "cloud-rain" },
-    { condition: "Thunderstorm", icon: "cloud-lightning" },
-    { condition: "Snowy", icon: "cloud-snow" },
-  ]
+// Custom debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value)
 
-  const randomCondition = CONDITIONS[Math.floor(Math.random() * CONDITIONS.length)]
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
 
-  return {
-    city,
-    temperature: Math.floor(Math.random() * 35) - 5,
-    condition: randomCondition.condition,
-    humidity: Math.floor(Math.random() * 100),
-    windSpeed: Math.floor(Math.random() * 30),
-    icon: randomCondition.icon,
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
+
+async function searchCities(query: string): Promise<City[]> {
+  const API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY
+  if (!API_KEY) throw new Error("API key not found")
+
+  try {
+    const response = await fetch(
+      `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query)}&limit=5&appid=${API_KEY}`
+    )
+    
+    if (!response.ok) throw new Error('City search failed')
+    
+    const data = await response.json()
+    return data.map((city: any) => ({
+      name: city.name,
+      country: city.country,
+      lat: city.lat,
+      lon: city.lon
+    }))
+  } catch (error) {
+    console.error("City search error:", error)
+    return []
   }
 }
 
-// icon component
-function WeatherIcon({ name }: { name: string }) {
-  const icons: Record<string, React.ReactNode> = {
-    sun: <Sun className="h-8 w-8 text-yellow-500" />,
-    "cloud-sun": <CloudSun className="h-8 w-8 text-blue-400" />,
-    cloud: <Cloud className="h-8 w-8 text-gray-400" />,
-    "cloud-rain": <CloudRain className="h-8 w-8 text-blue-500" />,
-    "cloud-lightning": <CloudLightning className="h-8 w-8 text-purple-500" />,
-    "cloud-snow": <CloudSnow className="h-8 w-8 text-blue-200" />,
+async function fetchWeatherData(city: City): Promise<WeatherData> {
+  const API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY
+  if (!API_KEY) throw new Error("API key not found")
+
+  try {
+    const response = await fetch(
+      `https://api.openweathermap.org/data/2.5/weather?lat=${city.lat}&lon=${city.lon}&units=metric&appid=${API_KEY}`
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || 'Weather fetch failed')
+    }
+
+    const data = await response.json()
+    
+    return {
+      city: city.name,
+      country: city.country,
+      temperature: Math.round(data.main.temp),
+      condition: data.weather[0].main,
+      humidity: data.main.humidity,
+      windSpeed: Math.round(data.wind.speed * 3.6),
+      icon: data.weather[0].icon,
+      description: data.weather[0].description
+    }
+  } catch (error) {
+    console.error("Weather fetch error:", error)
+    throw error
+  }
+}
+
+function WeatherIcon({ code }: { code: string }) {
+  const iconMap: Record<string, React.ReactNode> = {
+    '01d': <Sun className="h-8 w-8 text-yellow-500" />,
+    '01n': <Moon className="h-8 w-8 text-blue-300" />,
+    '02d': <CloudSun className="h-8 w-8 text-blue-400" />,
+    '02n': <CloudMoon className="h-8 w-8 text-blue-400" />,
+    '03d': <Cloud className="h-8 w-8 text-gray-400" />,
+    '04d': <Cloud className="h-8 w-8 text-gray-500" />,
+    '09d': <CloudRain className="h-8 w-8 text-blue-500" />,
+    '10d': <CloudRain className="h-8 w-8 text-blue-600" />,
+    '11d': <CloudLightning className="h-8 w-8 text-yellow-600" />,
+    '13d': <CloudSnow className="h-8 w-8 text-blue-200" />,
+    '50d': <CloudFog className="h-8 w-8 text-gray-300" />
   }
 
-  return icons[name] || <Cloud className="h-8 w-8" />
+  return iconMap[code] || <Cloud className="h-8 w-8" />
 }
 
 export default function WeatherDashboard() {
-  const [cities, setCities] = useState<string[]>([])
+  const [cities, setCities] = useState<City[]>([])
   const [weatherData, setWeatherData] = useState<Record<string, WeatherData>>({})
   const [loading, setLoading] = useState<Record<string, boolean>>({})
-  const [searchQuery, setSearchQuery] = useState("")
+  const [searchTerm, setSearchTerm] = useState("")
+  const [citySuggestions, setCitySuggestions] = useState<City[]>([])
   const [unit, setUnit] = useState<"C" | "F">("C")
-  const [showDropdown, setShowDropdown] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
 
   // Load saved cities from localStorage
   useEffect(() => {
     const savedCities = localStorage.getItem("weatherCities")
-    if (savedCities) {
-      setCities(JSON.parse(savedCities))
-    }
+    if (savedCities) setCities(JSON.parse(savedCities))
   }, [])
 
   // Save cities to localStorage
@@ -96,191 +140,240 @@ export default function WeatherDashboard() {
     localStorage.setItem("weatherCities", JSON.stringify(cities))
   }, [cities])
 
-  // Fetch weather data for cities
+  // Handle city search
   useEffect(() => {
-    const fetchData = async () => {
-      for (const city of cities) {
-        if (!weatherData[city] && !loading[city]) {
-          setLoading((prev) => ({ ...prev, [city]: true }))
-
-          // API delay
-          await new Promise((resolve) => setTimeout(resolve, 500))
-
-          // Generate mock data
-          const data = generateWeatherData(city)
-          setWeatherData((prev) => ({ ...prev, [city]: data }))
-          setLoading((prev) => ({ ...prev, [city]: false }))
+    const fetchCitySuggestions = async () => {
+      if (debouncedSearchTerm.length >= 3) {
+        try {
+          const results = await searchCities(debouncedSearchTerm)
+          setCitySuggestions(results)
+          setError(null)
+        } catch (error) {
+          setError("Failed to search cities")
+          setCitySuggestions([])
         }
+      } else {
+        setCitySuggestions([])
       }
     }
 
-    fetchData()
-  }, [cities, weatherData, loading])
+    fetchCitySuggestions()
+  }, [debouncedSearchTerm])
 
-  // Add a city to the dashboard
-  const addCity = (city: string) => {
-    if (!cities.includes(city)) {
-      setCities((prev) => [...prev, city])
+  // Fetch weather data for cities
+  useEffect(() => {
+    const fetchData = async () => {
+      setError(null)
+      try {
+        const weatherPromises = cities.map(async (city) => {
+          const cityKey = `${city.name},${city.country}`
+          if (!weatherData[cityKey] && !loading[cityKey]) {
+            setLoading(prev => ({ ...prev, [cityKey]: true }))
+            try {
+              const data = await fetchWeatherData(city)
+              setWeatherData(prev => ({ ...prev, [cityKey]: data }))
+            } finally {
+              setLoading(prev => ({ ...prev, [cityKey]: false }))
+            }
+          }
+        })
+
+        await Promise.all(weatherPromises)
+      } catch (err) {
+        setError("Failed to fetch weather data for some cities")
+      }
     }
-    setSearchQuery("")
-    setShowDropdown(false)
+
+    if (cities.length > 0) fetchData()
+  }, [cities])
+
+  const addCity = (city: City) => {
+    const cityKey = `${city.name},${city.country}`
+    if (!cities.some(c => `${c.name},${c.country}` === cityKey)) {
+      setCities(prev => [...prev, city])
+    }
+    setSearchTerm("")
+    setCitySuggestions([])
   }
 
-  // Remove a city from the dashboard
-  const removeCity = (city: string) => {
-    setCities((prev) => prev.filter((c) => c !== city))
-    setWeatherData((prev) => {
+  const removeCity = (cityKey: string) => {
+    setCities(prev => prev.filter(c => `${c.name},${c.country}` !== cityKey))
+    setWeatherData(prev => {
       const newData = { ...prev }
-      delete newData[city]
+      delete newData[cityKey]
       return newData
     })
   }
 
-  // Convert temperature between Celsius and Fahrenheit
-  const convertTemperature = (temp: number, unit: "C" | "F"): number => {
-    if (unit === "C") return temp
-    return Math.round((temp * 9) / 5 + 32)
-  }
+  const convertTemperature = (temp: number, unit: "C" | "F") => 
+    unit === "C" ? temp : Math.round((temp * 9) / 5 + 32)
 
-  // Refresh all weather data
-  const refreshData = () => {
+  const refreshData = async () => {
     setWeatherData({})
-  }
+    setError(null)
+    try {
+      const weatherPromises = cities.map(async (city) => {
+        const cityKey = `${city.name},${city.country}`
+        setLoading(prev => ({ ...prev, [cityKey]: true }))
+        try {
+          const data = await fetchWeatherData(city)
+          setWeatherData(prev => ({ ...prev, [cityKey]: data }))
+        } finally {
+          setLoading(prev => ({ ...prev, [cityKey]: false }))
+        }
+      })
 
-  // Filter cities based on search query
-  const filteredCities = CITIES.filter(
-    (city) => city.toLowerCase().includes(searchQuery.toLowerCase()) && !cities.includes(city),
-  )
+      await Promise.all(weatherPromises)
+    } catch (err) {
+      setError("Failed to refresh weather data")
+    }
+  }
 
   return (
     <div className="my-5 lg:my-10">
       <div className="custom-container">
-      <div className="flex flex-col space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold">Weather Dashboard</h1>
-            <Button variant="ghost" size="icon" onClick={refreshData} className="mt-1">
-              <RefreshCw className="h-5 w-5" />
-              <span className="sr-only">Refresh weather data</span>
-            </Button>
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
+            {error}
           </div>
+        )}
 
-          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="unit-toggle"
-                checked={unit === "F"}
-                onCheckedChange={(checked) => setUnit(checked ? "F" : "C")}
-              />
-              <Label htmlFor="unit-toggle">°{unit}</Label>
+        <div className="flex flex-col space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold">Weather Dashboard</h1>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={refreshData} 
+                className="mt-1"
+                disabled={Object.values(loading).some(Boolean)}
+              >
+                <RefreshCw className="h-5 w-5" />
+                <span className="sr-only">Refresh weather data</span>
+              </Button>
             </div>
 
-            <div className="relative flex-1 sm:flex-initial">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Add a city..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    setShowDropdown(true)
-                  }}
-                  onFocus={() => setShowDropdown(true)}
-                  className="w-full"
+            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="unit-toggle"
+                  checked={unit === "F"}
+                  onCheckedChange={checked => setUnit(checked ? "F" : "C")}
                 />
-                <Button variant="outline" onClick={() => setShowDropdown(!showDropdown)}>
-                  <Search className="h-4 w-4" />
-                </Button>
+                <Label htmlFor="unit-toggle">°{unit}</Label>
               </div>
 
-              {showDropdown && searchQuery && (
-                <div className="absolute z-10 mt-1 w-full bg-background border rounded-md shadow-lg">
-                  {filteredCities.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">No cities found</div>
-                  ) : (
+              <div className="relative flex-1 sm:flex-initial">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Search for a city..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full"
+                  />
+                  <Button variant="outline" disabled={searchTerm.length === 0}>
+                    <Search className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {citySuggestions.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-background border rounded-md shadow-lg">
                     <ul>
-                      {filteredCities.map((city) => (
+                      {citySuggestions.map((city, index) => (
                         <li
-                          key={city}
+                          key={`${city.name}-${index}`}
                           className="px-3 py-2 hover:bg-muted cursor-pointer text-sm"
                           onClick={() => addCity(city)}
                         >
-                          {city}
+                          {city.name}, {city.country}
                         </li>
                       ))}
                     </ul>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
+          {cities.length === 0 ? (
+            <div className="text-center py-12">
+              <h2 className="text-xl font-medium text-muted-foreground">
+                No cities added yet. Search for a city to see weather information.
+              </h2>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {cities.map(city => {
+                const cityKey = `${city.name},${city.country}`
+                const data = weatherData[cityKey]
+                const isLoading = loading[cityKey]
+
+                return (
+                  <Card key={cityKey} className="overflow-hidden">
+                    <CardContent className="p-0">
+                      {isLoading ? (
+                        <div className="p-6 space-y-4">
+                          <div className="flex justify-between items-start">
+                            <Skeleton className="h-8 w-24" />
+                            <Skeleton className="h-8 w-8 rounded-full" />
+                          </div>
+                          <Skeleton className="h-16 w-24" />
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeCity(cityKey)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+
+                          <div className="p-6">
+                            <h2 className="text-xl font-semibold mb-4">
+                              {data?.city || city.name}
+                              <span className="text-sm ml-2 text-muted-foreground">
+                                {data?.country || city.country}
+                              </span>
+                            </h2>
+                            <div className="flex items-center mb-4">
+                              <div className="text-4xl font-bold">
+                                {convertTemperature(data?.temperature || 0, unit)}°{unit}
+                              </div>
+                              <div className="ml-4">
+                                <WeatherIcon code={data?.icon || "01d"} />
+                              </div>
+                            </div>
+                            <div className="text-lg mb-2 capitalize">
+                              {data?.description || "Loading..."}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              <div className="flex justify-between py-1">
+                                <span>Humidity</span>
+                                <span>{data?.humidity ?? "--"}%</span>
+                              </div>
+                              <div className="flex justify-between py-1">
+                                <span>Wind</span>
+                                <span>{data?.windSpeed ?? "--"} km/h</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
         </div>
-
-        {cities.length === 0 ? (
-          <div className="text-center py-12">
-            <h2 className="text-xl font-medium text-muted-foreground">
-              No cities added yet. Add a city to see weather information.
-            </h2>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {cities.map((city) => (
-              <Card key={city} className="overflow-hidden">
-                <CardContent className="p-0">
-                  {loading[city] ? (
-                    <div className="p-6 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <Skeleton className="h-8 w-24" />
-                        <Skeleton className="h-8 w-8 rounded-full" />
-                      </div>
-                      <Skeleton className="h-16 w-24" />
-                      <div className="space-y-2">
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-3/4" />
-                      </div>
-                    </div>
-                  ) : weatherData[city] ? (
-                    <div className="relative">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
-                        onClick={() => removeCity(city)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-
-                      <div className="p-6">
-                        <h2 className="text-xl font-semibold mb-4">{city}</h2>
-                        <div className="flex items-center mb-4">
-                          <div className="text-4xl font-bold">
-                            {convertTemperature(weatherData[city].temperature, unit)}°{unit}
-                          </div>
-                          <div className="ml-4">
-                            <WeatherIcon name={weatherData[city].icon} />
-                          </div>
-                        </div>
-                        <div className="text-lg mb-2">{weatherData[city].condition}</div>
-                        <div className="text-sm text-muted-foreground">
-                          <div className="flex justify-between py-1">
-                            <span>Humidity</span>
-                            <span>{weatherData[city].humidity}%</span>
-                          </div>
-                          <div className="flex justify-between py-1">
-                            <span>Wind</span>
-                            <span>{weatherData[city].windSpeed} km/h</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
       </div>
-    </div>
     </div>
   )
 }
-
