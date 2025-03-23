@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { Search, Trash2, Sun, Cloud, CloudSun, CloudRain, CloudLightning, CloudSnow, RefreshCw, Moon, CloudMoon, CloudFog } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -27,7 +27,14 @@ interface City {
   lon: number
 }
 
-// Custom debounce hook
+interface ApiCity {
+  name: string
+  country: string
+  lat: number
+  lon: number
+  [key: string]: unknown
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value)
 
@@ -55,15 +62,15 @@ async function searchCities(query: string): Promise<City[]> {
     
     if (!response.ok) throw new Error('City search failed')
     
-    const data = await response.json()
-    return data.map((city: any) => ({
+    const data: ApiCity[] = await response.json()
+    return data.map((city) => ({
       name: city.name,
       country: city.country,
       lat: city.lat,
       lon: city.lon
     }))
-  } catch (error) {
-    console.error("City search error:", error)
+  } catch {
+    console.error("City search error")
     return []
   }
 }
@@ -94,9 +101,9 @@ async function fetchWeatherData(city: City): Promise<WeatherData> {
       icon: data.weather[0].icon,
       description: data.weather[0].description
     }
-  } catch (error) {
-    console.error("Weather fetch error:", error)
-    throw error
+  } catch {
+    console.error("Weather fetch error")
+    throw new Error("Failed to fetch weather data")
   }
 }
 
@@ -129,18 +136,15 @@ export default function WeatherDashboard() {
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300)
 
-  // Load saved cities from localStorage
   useEffect(() => {
     const savedCities = localStorage.getItem("weatherCities")
     if (savedCities) setCities(JSON.parse(savedCities))
   }, [])
 
-  // Save cities to localStorage
   useEffect(() => {
     localStorage.setItem("weatherCities", JSON.stringify(cities))
   }, [cities])
 
-  // Handle city search
   useEffect(() => {
     const fetchCitySuggestions = async () => {
       if (debouncedSearchTerm.length >= 3) {
@@ -148,7 +152,7 @@ export default function WeatherDashboard() {
           const results = await searchCities(debouncedSearchTerm)
           setCitySuggestions(results)
           setError(null)
-        } catch (error) {
+        } catch {
           setError("Failed to search cities")
           setCitySuggestions([])
         }
@@ -160,7 +164,6 @@ export default function WeatherDashboard() {
     fetchCitySuggestions()
   }, [debouncedSearchTerm])
 
-  // Fetch weather data for cities
   useEffect(() => {
     const fetchData = async () => {
       setError(null)
@@ -179,13 +182,13 @@ export default function WeatherDashboard() {
         })
 
         await Promise.all(weatherPromises)
-      } catch (err) {
+      } catch {
         setError("Failed to fetch weather data for some cities")
       }
     }
 
     if (cities.length > 0) fetchData()
-  }, [cities])
+  }, [cities, loading, weatherData])
 
   const addCity = (city: City) => {
     const cityKey = `${city.name},${city.country}`
@@ -224,7 +227,7 @@ export default function WeatherDashboard() {
       })
 
       await Promise.all(weatherPromises)
-    } catch (err) {
+    } catch {
       setError("Failed to refresh weather data")
     }
   }
@@ -280,9 +283,9 @@ export default function WeatherDashboard() {
                 {citySuggestions.length > 0 && (
                   <div className="absolute z-10 mt-1 w-full bg-background border rounded-md shadow-lg">
                     <ul>
-                      {citySuggestions.map((city, index) => (
+                      {citySuggestions.map((city) => (
                         <li
-                          key={`${city.name}-${index}`}
+                        key={`${city.name}-${city.country}-${city.lat}-${city.lon}`}
                           className="px-3 py-2 hover:bg-muted cursor-pointer text-sm"
                           onClick={() => addCity(city)}
                         >
@@ -305,12 +308,13 @@ export default function WeatherDashboard() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {cities.map(city => {
+                 const uniqueKey = `${city.name}-${city.country}-${city.lat}-${city.lon}`
                 const cityKey = `${city.name},${city.country}`
                 const data = weatherData[cityKey]
                 const isLoading = loading[cityKey]
 
                 return (
-                  <Card key={cityKey} className="overflow-hidden">
+                  <Card key={uniqueKey} className="overflow-hidden">
                     <CardContent className="p-0">
                       {isLoading ? (
                         <div className="p-6 space-y-4">
@@ -329,7 +333,7 @@ export default function WeatherDashboard() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                            className="absolute top-2 right-2 text-muted-foreground hover:text-destructive cursor-pointer"
                             onClick={() => removeCity(cityKey)}
                           >
                             <Trash2 className="h-4 w-4" />
