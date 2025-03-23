@@ -54,7 +54,7 @@ function useDebounce<T>(value: T, delay: number): T {
 async function searchCities(query: string): Promise<City[]> {
   const API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY
   if (!API_KEY) throw new Error("API key not found")
-
+    console.log("API KEY",API_KEY)
   try {
     const response = await fetch(
       `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query)}&limit=5&appid=${API_KEY}`
