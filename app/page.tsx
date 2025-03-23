@@ -78,6 +78,7 @@ async function searchCities(query: string): Promise<City[]> {
 async function fetchWeatherData(city: City): Promise<WeatherData> {
   const API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY
   if (!API_KEY) throw new Error("API key not found")
+    console.log("API KEY",API_KEY)
 
   try {
     const response = await fetch(
