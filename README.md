@@ -2,7 +2,7 @@
 
 A modern, responsive weather dashboard that displays mock weather data for selected cities. Built with React, TypeScript, and Tailwind CSS.
 
-![Weather Dashboard Preview](https://weather-dashboard-54yzdil9m-maynuddinbhuiyans-projects.vercel.app/) <!-- Add real screenshot -->
+![Weather Dashboard Preview] (https://weather-dashboard-54yzdil9m-maynuddinbhuiyans-projects.vercel.app/) 
 
 ## ✨ Features
 
